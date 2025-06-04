@@ -7,6 +7,12 @@ Original file is located at
     https://colab.research.google.com/drive/1-Icdaa1npbouLL4tMoaIPebkPu3_pgff
 """
 
+#Nubia Araujo
+#Madelin Constante
+#Juan Donoso
+#Mateo Montenegro
+#Brenda Simbaña
+
 # ================================================
 #         LIBRERÍAS NECESARIAS
 # ================================================
@@ -384,6 +390,20 @@ for i, tfidf in enumerate(tfidf_list):
             tfidf_matrix[i, j] = value
 
 # ================================================
+#          GUARDAR MATRIZ TF-IDF EN CSV
+# ================================================
+
+# Define the output CSV file name
+output_csv_name = 'embeddings_tfidf.csv'
+
+try:
+    # Save the tf_idf_df DataFrame to a CSV file
+    tf_idf_df.to_csv(output_csv_name, index=False)
+    print(f"La matriz TF-IDF se ha guardado exitosamente en '{output_csv_name}'")
+except Exception as e:
+    print(f"Error al guardar la matriz TF-IDF en CSV: {e}")
+
+# ================================================
 #         LLM
 # ================================================
 """
@@ -506,7 +526,7 @@ if embeddings_list and len(embeddings_list) == len(df):
         'embedding': embeddings_list
     })
   try:
-      output_csv_name = 'abstract_embeddings_output.csv'
+      output_csv_name = 'abstract_embeddings_LLM.csv'
       embeddings_df.to_csv(output_csv_name, index=False)
       print(f"Los IDs y sus embeddings correspondientes se han guardado en '{output_csv_name}'")
   except Exception as e:
@@ -517,8 +537,16 @@ else:
     print("No se generaron embeddings.")
 
 # ================================================
-#         WORD2VEC INICIALIZADO CON EMBEDDINGS DE BERT
+#         INSTALAR DEPENDENCIAS
 # ================================================
+#!pip install gensim
+#!pip install transformers
+#!pip install torch
+#Reiniciar el entorno de ejecución luego de instalar las dependencias
+
+# =====================================================
+#         WORD2VEC INICIALIZADO CON EMBEDDINGS DE BERT
+# =====================================================
 
 import pandas as pd
 import re
@@ -648,6 +676,9 @@ for tokens in abstracts:
         avg_vector = np.zeros(embedding_dim)
     embeddings_list.append(avg_vector.tolist())
 
+for embedding in embeddings_list:
+    print(embedding)
+
 # ================================================
 #         GUARDAR EMBEDDINGS EN CSV
 # ================================================
@@ -692,32 +723,34 @@ print(f"Cantidad de nombres únicos en la columna 'session': {unique_sessions_co
 
 k = unique_sessions_count  # Cambia esto según lo que descubras con el método del codo
 kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-df['cluster'] = kmeans.fit_predict(tfidf_matrix)
 
 # ===========================================================
 #         VALOR DE K Y VECTOR CARDINALIDAD_CLUSTERS
 # ===========================================================
-
 # Ver ejemplos por cluster
-for i in range(k):
-    cluster_docs = df[df['cluster'] == i]['abstract']
-    print(f"\nCluster {i} ejemplos:")
-    if len(cluster_docs) >= 2:
-        print(cluster_docs.sample(2).values)
-    else:
-        print(cluster_docs.values)  # Muestra lo que haya, aunque sea 1
-print("\nDistribución de documentos por cluster:")
-print(df['cluster'].value_counts())
+def analizar_clusters(df, k):
+    for i in range(k):
+        cluster_docs = df[df['cluster'] == i]['abstract']
+        print(f"\nCluster {i} ejemplos:")
+        if len(cluster_docs) >= 2:
+            print(cluster_docs.sample(2).values)
+        else:
+            print(cluster_docs.values)  # Muestra lo que haya, aunque sea 1
+    print("\nDistribución de documentos por cluster:")
+    print(df['cluster'].value_counts())
 
-# Obtener la cantidad de documentos por cluster
-cluster_counts = df['cluster'].value_counts().sort_index()
+    # Obtener la cantidad de documentos por cluster
+    cluster_counts = df['cluster'].value_counts().sort_index()
 
-# Guardar solo las cantidades en una lista (vector)
-cardinalidades_clusters = cluster_counts.tolist()
+    # Guardar solo las cantidades en una lista (vector)
+    cardinalidades_clusters = cluster_counts.tolist()
 
-# Mostrar resultado
-print("Cardinalidades por cluster:", cardinalidades_clusters)
+    # Mostrar resultado
+    print("Cardinalidades por cluster:", cardinalidades_clusters)
+    return cardinalidades_clusters
 
+df['cluster'] = kmeans.fit_predict(tfidf_matrix)
+cardinalidades_clusters = analizar_clusters(df, k)
 # ================================================
 #         VALIDACIÓN: TF-IDF
 # ================================================
@@ -739,20 +772,20 @@ import numpy as np
 import pandas as pd
 
 # Carga de embeddings desde CSV
-LLM_embeddings_df = pd.read_csv('abstract_embeddings_output.csv')
+LLM_embeddings_df = pd.read_csv('abstract_embeddings_LLM.csv')
 
 # Convertir strings a listas (si es necesario)
 LLM_embeddings = LLM_embeddings_df['embedding'].apply(ast.literal_eval)
 
 # Convertir a matriz NumPy 2D
 X = np.vstack(LLM_embeddings.values)
-
-# Asumimos que 'df' está previamente cargado y contiene la columna 'session'
-y = df['session'].values
+df['cluster'] = kmeans.fit_predict(X)
+cardinalidades_clusters = analizar_clusters(df, k)
 
 # ================================================
 #         VALIDACIÓN: LLM
 # ================================================
+y = df['session'].values
 D = calculate_distance_matrix(X)
 
 results = run_bat_algorithm(X, cardinalidades_clusters)
@@ -764,7 +797,7 @@ print(global_results['AMI'])  # Adjusted Mutual Information
 print(global_results['ARI'])  # Adjusted Rand Index
 print(global_results['NMI'])  # Normalized Mutual Information
 #Mostrar Gráfico de Silueta
-plot_silhouette(tfidf_matrix, df['cluster'].values, D)
+plot_silhouette(X, df['cluster'].values, D)
 
 import ast
 import numpy as np
@@ -778,15 +811,14 @@ w2v_embeddings = w2v_embeddings_df['embedding'].apply(ast.literal_eval)
 
 # Convertir a matriz NumPy 2D
 X = np.vstack(w2v_embeddings.values)
-
-# Asumimos que 'df' está previamente cargado y contiene la columna 'session'
-y = df['session'].values
+df['cluster'] = kmeans.fit_predict(X)
+cardinalidades_clusters = analizar_clusters(df, k)
 
 # ================================================
 #         VALIDACIÓN: WORD2VEC con modelo BERT
 # ================================================
+y = df['session'].values
 D = calculate_distance_matrix(X)
-
 results = run_bat_algorithm(X, cardinalidades_clusters)
 global_results = print_results(results, y, X, D, cardinalidades_clusters, "w2v_embeddings_df")
 # Ver resultados
@@ -796,4 +828,4 @@ print(global_results['AMI'])  # Adjusted Mutual Information
 print(global_results['ARI'])  # Adjusted Rand Index
 print(global_results['NMI'])  # Normalized Mutual Information
 #Mostrar Gráfico de Silueta
-plot_silhouette(tfidf_matrix, df['cluster'].values, D)
+plot_silhouette(X, df['cluster'].values, D)
